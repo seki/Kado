@@ -73,11 +73,22 @@ EOS
       @book = book
     end
 
+    def redirect_if_necessary(req, res)
+      return unless  req.path_info == ''
+      res.set_redirect(WEBrick::HTTPStatus::MovedPermanently,
+                       req.request_uri.to_s + '/')
+    end
+
     def do_GET(req, res)
+      redirect_if_necessary(req, res)      
+      build_page(req, res)
+    end
+
+    def do_POST(req, res)
+      redirect_if_necessary(req, res)      
       do_request(req, res)
       build_page(req, res)
     end
-    alias :do_POST :do_GET
 
     def do_request(req, res)
       text ,= req.query['text']
