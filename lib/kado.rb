@@ -5,8 +5,15 @@ require 'webrick/cgi'
 require 'drb/drb'
 require 'erb'
 require 'monitor'
+require 'pp'
 
 class WikiR
+  def initialize
+    @book = Book.new
+    @ui = UI.new(@book)
+  end
+  attr_reader :book, :ui
+
   class Book
     include MonitorMixin
     def initialize
@@ -32,13 +39,22 @@ class WikiR
       @name = name
       set_src("# #{name}\n\nan empty page. edit me.")
     end
-    attr_reader :name, :src, :html, :warnings
+    attr_reader :name, :src, :html, :warnings, :title
 
     def set_src(text)
       @src = text
       km = Kramdown::Document.new(text)
+      @title = fetch_title(km) || @name
       @html = km.to_html
       @warnings = km.warnings
+    end
+
+    def fetch_title(km)
+      header = km.root.children.find {|x| x.type == :header}
+      return nil unless header
+      text = header.children.find {|x| x.type == :text}
+      return nil unless text
+      text.value
     end
   end
 
@@ -48,7 +64,7 @@ class WikiR
     def_erb_method('to_html(page)', ERB.new(<<EOS))
 <html>
  <head>
-  <title>Kramdown</title>
+  <title><%=h page.title%></title>
   <script language="JavaScript">
 function open_edit(){
 document.getElementById('edit').style.display = "block";
@@ -106,8 +122,7 @@ EOS
 end
 
 if __FILE__ == $0
-  book = WikiR::Book.new
-  ui = WikiR::UI.new(book)
-  DRb.start_service('druby://localhost:50830', ui)
+  wiki_r = WikiR.new
+  DRb.start_service('druby://localhost:50830', wiki_r.ui)
   DRb.thread.join
 end
