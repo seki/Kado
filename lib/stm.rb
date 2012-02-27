@@ -12,14 +12,30 @@ class STM
     end
 
     def deref
-      context = @stm.context || @stm
-      context.deref(@name)[1]
+      _deref[1]
     end
 
     def refset(value)
       context = @stm.context
       raise TransactionNotFound unless context
       context.refset(@name, value)
+    end
+
+    def _deref
+      context = @stm.context || @stm
+      context.deref(@name)
+    end
+    
+    def _age
+      _deref[0]
+    end
+
+    def newest?(*src)
+      my_age = _age
+      src.each do |ref|
+        return false if my_age < ref._age
+      end
+      true
     end
   end
   
@@ -100,21 +116,39 @@ class STM
   end
 end
 
-stm = STM.new
-a = stm.ref(0)
+if __FILE__ == $0
+  stm = STM.new
+  a = stm.ref(0)
+  b = stm.ref(0)
+  c = stm.ref(0)
 
-t = (1..10).collect do
-  Thread.new do
-    10.times do
-      stm.transaction(true) do
-        it = a.deref
-        sleep(0.2 * rand)
-        a.refset(it + 1)
+  p c.newest?(a, b)
+  p b.newest?(a, c)
+
+  t = (1..10).collect do
+    Thread.new do
+      10.times do
+        stm.transaction(true) do
+          it = a.deref
+          sleep(0.2 * rand)
+          a.refset(it + 1)
+        end
       end
     end
   end
+  
+  t.each {|th| th.join}
+
+  p a.newest?(b, c)
+  p a.deref
+
+
+  p [1, b.newest?(a)]
+  unless b.newest?(a)
+    stm.transaction do
+      b.refset(b.deref + 1)
+      p [2, b.newest?(a)]
+    end
+  end
+  p [3, b.newest?(a)]
 end
-
-t.each {|th| th.join}
-
-p a.deref
